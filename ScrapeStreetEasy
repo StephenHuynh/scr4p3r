@@ -1,0 +1,243 @@
+package odesk.scraper.gerald;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.DataInputStream;
+import java.io.FileInputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.List;
+
+import odesk.scraper.utilities.Common;
+
+import org.openqa.selenium.By;
+import org.openqa.selenium.NoSuchElementException;
+import org.openqa.selenium.TimeoutException;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebElement;
+import org.openqa.selenium.chrome.ChromeDriver;
+import org.openqa.selenium.firefox.FirefoxDriver;
+import org.openqa.selenium.firefox.FirefoxProfile;
+import org.openqa.selenium.phantomjs.PhantomJSDriver;
+import org.openqa.selenium.phantomjs.PhantomJSDriverService;
+import org.openqa.selenium.remote.DesiredCapabilities;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
+
+public class ScrapeStreetEasy {
+	static WebDriver driver;
+
+	public static void main(String[] args) {
+		ScrapeStreetEasy obj = new ScrapeStreetEasy();
+
+		// Scrape the building lists
+		try {
+			obj.scrapeBuildingLinksFromStreetEasy("Firefox",
+					"http://www.streeteasy.com", "D:\\oDesk\\Scraper\\Gerald",
+					"All Downtown.txt");
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+	}
+
+	public static FirefoxProfile firefoxProfile() throws Exception {
+		FirefoxProfile firefoxProfile = new FirefoxProfile();
+		firefoxProfile.setPreference("browser.download.folderList", 2);
+		firefoxProfile.setPreference(
+				"browser.download.manager.showWhenStarting", false);
+		firefoxProfile.setPreference("browser.download.dir",
+				"D:\\WebDriverDownloadFolder");
+		firefoxProfile.setPreference("browser.helperApps.neverAsk.saveToDisk",
+				"application/pdf");
+
+		firefoxProfile.setPreference("pdfjs.disabled", true);
+
+		// Use this to disable Acrobat plugin for previewing PDFs in Firefox (if
+		// you have Adobe reader installed on your computer)
+		firefoxProfile.setPreference("plugin.scan.Acrobat", "99.0");
+		firefoxProfile.setPreference("plugin.scan.plid.all", false);
+
+		return firefoxProfile;
+	}
+
+	private static boolean isElementPresent(WebDriver driver, By by) {
+		try {
+			driver.findElement(by);
+			return true;
+		} catch (NoSuchElementException e) {
+			return false;
+		}
+	}
+
+	public void scrapeBuildingLinksFromStreetEasy(String browser,
+			String basedUrl, String folderName, String fileName)
+			throws IOException {
+
+		switch (browser) {
+		case "Firefox":
+			try {
+				driver = new FirefoxDriver(firefoxProfile());
+			} catch (Exception e2) {
+				// TODO Auto-generated catch block
+				System.out.println("Unable to using Firefox Profile.");
+				driver = new FirefoxDriver();
+			}
+			break;
+
+		case "Chrome":
+			System.setProperty("webdriver.chrome.driver",
+					"D:/oDesk/chromedriver.exe");
+			driver = new ChromeDriver();
+			break;
+
+		case "Headless":
+			// prepare capabilities
+			DesiredCapabilities DesireCaps = new DesiredCapabilities();
+			DesireCaps.setCapability("takesScreenshot", true);
+			DesireCaps.setCapability(
+					PhantomJSDriverService.PHANTOMJS_EXECUTABLE_PATH_PROPERTY,
+					"D:\\Softwares\\phantomjs-1.9.2-windows\\phantomjs.exe");
+			driver = new PhantomJSDriver(DesireCaps);
+			break;
+
+		}
+
+		driver.get(basedUrl);
+		driver.manage().window().maximize();
+
+		String xpathLink = "//h5/a";
+
+		// Create file
+		FileWriter fstream = new FileWriter(folderName
+				+ "\\StreetEasy_BuildingLinks_" + fileName);
+		BufferedWriter exportLinks = new BufferedWriter(fstream);
+
+		boolean hasNext = true;
+		while (hasNext) {
+			List<WebElement> Listings = driver
+					.findElements(By.xpath(xpathLink));
+			for (WebElement listing : Listings) {
+				exportLinks.write(listing.getAttribute("href"));
+				exportLinks.write("\n");
+			}
+			hasNext = isElementPresent(driver,
+					By.xpath("//a[@class='next_page']/i"));
+			try {
+				driver.findElement(By.xpath("//a[@class='next_page']/i"))
+						.click();
+
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				// e.printStackTrace();
+				exportLinks.close();
+			}
+		}
+		// Close the output stream
+		exportLinks.close();
+	}
+
+	public void scrapeBuildingDetailsFromLists(String browser,
+			String folderName, String fileName) {
+		String basedUrl = "http://www.StreetEasy.com";
+		switch (browser) {
+		case "Firefox":
+			try {
+				driver = new FirefoxDriver(firefoxProfile());
+			} catch (Exception e2) {
+				// TODO Auto-generated catch block
+				System.out.println("Unable to using Firefox Profile.");
+				driver = new FirefoxDriver();
+			}
+			break;
+
+		case "Chrome":
+			System.setProperty("webdriver.chrome.driver",
+					"D:/oDesk/chromedriver.exe");
+			driver = new ChromeDriver();
+			break;
+
+		case "Headless":
+			// prepare capabilities
+			DesiredCapabilities DesireCaps = new DesiredCapabilities();
+			DesireCaps.setCapability("takesScreenshot", true);
+			DesireCaps.setCapability(
+					PhantomJSDriverService.PHANTOMJS_EXECUTABLE_PATH_PROPERTY,
+					"D:\\Softwares\\phantomjs-1.9.2-windows\\phantomjs.exe");
+			driver = new PhantomJSDriver(DesireCaps);
+			break;
+		}		
+		
+		Common objCommon = new Common();
+		driver.get(basedUrl);
+		driver.manage().window().maximize();
+		
+		
+		try {
+			// Open the file that is the first 
+			// command line parameter
+			FileInputStream fstream = new FileInputStream(folderName
+					+ "\\StreetEasy_BuildingLinks_" + fileName);
+			// Get the object of DataInputStream
+			DataInputStream inputStream = new DataInputStream(fstream);
+			BufferedReader br = new BufferedReader(new InputStreamReader(inputStream));
+			String strLine;
+			// Read File Line By Line
+			while ((strLine = br.readLine()) != null) {
+				// Navigate to the URL
+				driver.get(strLine);
+				
+				// Declare variables to store the scraped values
+				String building, address, noOfRecords, rentedDate, unitNo, rentPrice, beds, baths, foot;
+				
+				// Declare variables to store the Xpath, CSS Selectors
+				String pastRentalTabXpath = "//*[@id='building-tabs']/div[3]";
+				String rentalRecordXpath = "//*[@class='listing_block loaded']/tr/td[@class='activity_date']";
+				String allActivityLinkXpath = "//*[@id='see-all-activity-link' and not(@style)]/a";
+				String loadingIconXpath = "div[@class='loading']";
+				
+				// PAST RENTAL tab
+				if (isElementPresent(driver, By.xpath(pastRentalTabXpath))){
+					driver.findElement(By.xpath(pastRentalTabXpath)).click();
+					
+					
+					// waiting for awhile to load the RENTAL RECORDS,
+					WebDriverWait wait = new WebDriverWait(driver, 15);
+					try {
+						WebElement recordsFound = wait.until(ExpectedConditions
+								.presenceOfElementLocated(By
+										.xpath(rentalRecordXpath)));
+					} catch (TimeoutException timeOutExp) {
+						// There is no record found after a certain of seconds
+						System.out.println("No RENTAL RECORDS found");
+					}
+					
+					// There are ALL ACTIVITY LINK
+					if(isElementPresent(driver, By.xpath(allActivityLinkXpath))){
+						driver.findElement(By.xpath(allActivityLinkXpath)).click();
+						// waiting for awhile to load all RENTAL RECORDS
+						objCommon.loadingIcon(driver, loadingIconXpath);			
+						
+						// Start scraping the records
+						System.out.println();
+						
+					} else {
+						System.out.println("There is no ALL ACTIVITY LINK.");
+					}
+					
+				} else {
+					System.out.println("No PAST RENTAL tab");
+				}
+				
+				
+				
+			}
+			// Close the input stream
+			inputStream.close();
+		} catch (Exception e) {// Catch exception if any
+			System.err.println("Error: " + e.getMessage());
+		}
+	}
+}
