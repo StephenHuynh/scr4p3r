@@ -1,0 +1,34 @@
+scrapeBuildingLinksFromStreetEasy
+// Creating a txt file which stores all links
+- browser=
+- url=
+- folderName=D:\\oDesk\\Scraper\\Gerald
+- fileName=links.txt
+
+scrapeBuildingDetailsFromLists
+// scraping the building details based on txt files
+// Firstly Creating the outputExcelFile which contains 
+// URL, BUILDING, ADDRESS, NOOFRECORDS, RENTALDATE, UNIT, PRICE, BEDS, BATHS, FOOT
+- browser
+- folderName=D:\\oDesk\\Scraper\\Gerald
+- txtFile=links.txt
+- outputExcelFile= xls, xlsx
+
+
+scrapeParcelOwnerPropertyMailingPDF
+// scraping the Owner Details, Parcel, PDF FILE
+// Firstly Creating the outputExcelFile which contains 
+// Building, StreetNo, Street, Unit
+- browser
+- folderName=D:\\oDesk\\Scraper\\Gerald
+- inputExcelFile=xls
+- outputExcelFile= xls, xlsx
+
+scrapeOwnerAddressFromNYCSERVMain
+// scraping the Mailing Address along with PARCEL, OWNER, PROPERTY ADDRESS
+// Firstly Creating the inputExcelFile which contains PARCEL
+- browser
+- folderName=D:\\oDesk\\Scraper\\Gerald
+- inputExcelFile=xls
+- outputExcelFile=xls
+
