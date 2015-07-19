@@ -3,15 +3,25 @@ package odesk.scraper.gerald;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.DataInputStream;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.List;
 
+import jxl.Workbook;
+import jxl.read.biff.BiffException;
+import jxl.write.Label;
+import jxl.write.WritableSheet;
+import jxl.write.WritableWorkbook;
+import jxl.write.WriteException;
 import odesk.scraper.utilities.Common;
 
+import org.openqa.selenium.Alert;
 import org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
+import org.openqa.selenium.NoAlertPresentException;
 import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
@@ -29,18 +39,42 @@ public class ScrapeStreetEasy {
 	static WebDriver driver;
 
 	public static void main(String[] args) {
+		
 		ScrapeStreetEasy obj = new ScrapeStreetEasy();
-
+		
+		String folderName = "D:\\oDesk\\Scraper\\Gerald";
+		
+		
+		
 		// Scrape the building lists
+		/*
+		String sourceFile = "StreetEasy_All Upper West Side.txt";
+		String targetFile = "StreetEasy_All Upper West Side.xlsx";		
 		try {
 			obj.scrapeBuildingLinksFromStreetEasy("Firefox",
-					"http://www.streeteasy.com", "D:\\oDesk\\Scraper\\Gerald",
-					"All Downtown.txt");
+					"http://www.streeteasy.com", folderName, sourceFile);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-
+		*/
+		
+		// Scrape the building details and Rental records
+		/*
+		String sourceFile = "All Midtown_The Sheffield";
+		String targetFile = "StreetEasy_All Upper West Side.xlsx";	
+		obj.scrapeBuildingDetailsFromLists("Firefox", folderName, sourceFile, targetFile);
+		*/
+		
+		
+		// Scrape the Parcel Details
+		String sourceFile = "All Midtown_The Sheffield";				
+		obj.scrapeParcelOwnerPropertyMailingPDF("Firefox", sourceFile, 0, 500);
+		
+		
+		// Scrape the Mailing Address from MAIN
+		//obj.scrapeOwnerAddressFromNYCSERVMainNoAlert("Firefox", "LookupParcel", 303);
+		
 	}
 
 	public static FirefoxProfile firefoxProfile() throws Exception {
@@ -52,14 +86,11 @@ public class ScrapeStreetEasy {
 				"D:\\WebDriverDownloadFolder");
 		firefoxProfile.setPreference("browser.helperApps.neverAsk.saveToDisk",
 				"application/pdf");
-
 		firefoxProfile.setPreference("pdfjs.disabled", true);
-
 		// Use this to disable Acrobat plugin for previewing PDFs in Firefox (if
 		// you have Adobe reader installed on your computer)
 		firefoxProfile.setPreference("plugin.scan.Acrobat", "99.0");
 		firefoxProfile.setPreference("plugin.scan.plid.all", false);
-
 		return firefoxProfile;
 	}
 
@@ -75,7 +106,6 @@ public class ScrapeStreetEasy {
 	public void scrapeBuildingLinksFromStreetEasy(String browser,
 			String basedUrl, String folderName, String fileName)
 			throws IOException {
-
 		switch (browser) {
 		case "Firefox":
 			try {
@@ -86,13 +116,11 @@ public class ScrapeStreetEasy {
 				driver = new FirefoxDriver();
 			}
 			break;
-
 		case "Chrome":
 			System.setProperty("webdriver.chrome.driver",
 					"D:/oDesk/chromedriver.exe");
 			driver = new ChromeDriver();
 			break;
-
 		case "Headless":
 			// prepare capabilities
 			DesiredCapabilities DesireCaps = new DesiredCapabilities();
@@ -102,19 +130,14 @@ public class ScrapeStreetEasy {
 					"D:\\Softwares\\phantomjs-1.9.2-windows\\phantomjs.exe");
 			driver = new PhantomJSDriver(DesireCaps);
 			break;
-
 		}
-
 		driver.get(basedUrl);
 		driver.manage().window().maximize();
-
 		String xpathLink = "//h5/a";
-
 		// Create file
 		FileWriter fstream = new FileWriter(folderName
-				+ "\\StreetEasy_BuildingLinks_" + fileName);
+				+ "\\" + fileName);
 		BufferedWriter exportLinks = new BufferedWriter(fstream);
-
 		boolean hasNext = true;
 		while (hasNext) {
 			List<WebElement> Listings = driver
@@ -128,7 +151,6 @@ public class ScrapeStreetEasy {
 			try {
 				driver.findElement(By.xpath("//a[@class='next_page']/i"))
 						.click();
-
 			} catch (Exception e) {
 				// TODO Auto-generated catch block
 				// e.printStackTrace();
@@ -139,8 +161,12 @@ public class ScrapeStreetEasy {
 		exportLinks.close();
 	}
 
+	/*
+	 * July 15, 2015
+	 * excellent code
+	 */
 	public void scrapeBuildingDetailsFromLists(String browser,
-			String folderName, String fileName) {
+			String folderName, String sourceFile, String targetFile) {
 		String basedUrl = "http://www.StreetEasy.com";
 		switch (browser) {
 		case "Firefox":
@@ -152,13 +178,11 @@ public class ScrapeStreetEasy {
 				driver = new FirefoxDriver();
 			}
 			break;
-
 		case "Chrome":
 			System.setProperty("webdriver.chrome.driver",
 					"D:/oDesk/chromedriver.exe");
 			driver = new ChromeDriver();
 			break;
-
 		case "Headless":
 			// prepare capabilities
 			DesiredCapabilities DesireCaps = new DesiredCapabilities();
@@ -168,76 +192,869 @@ public class ScrapeStreetEasy {
 					"D:\\Softwares\\phantomjs-1.9.2-windows\\phantomjs.exe");
 			driver = new PhantomJSDriver(DesireCaps);
 			break;
-		}		
-		
+		}
 		Common objCommon = new Common();
+		ScrapeStreetEasy objMain = new ScrapeStreetEasy();
+		
 		driver.get(basedUrl);
 		driver.manage().window().maximize();
-		
-		
 		try {
-			// Open the file that is the first 
-			// command line parameter
+			// Open the file that is the first command line parameter
 			FileInputStream fstream = new FileInputStream(folderName
-					+ "\\StreetEasy_BuildingLinks_" + fileName);
+					+ "\\" + sourceFile);
 			// Get the object of DataInputStream
 			DataInputStream inputStream = new DataInputStream(fstream);
-			BufferedReader br = new BufferedReader(new InputStreamReader(inputStream));
-			String strLine;
+			BufferedReader br = new BufferedReader(new InputStreamReader(
+					inputStream));
+			
+			String strLine = br.readLine();
 			// Read File Line By Line
-			while ((strLine = br.readLine()) != null) {
+			while (strLine != null) {
+				
 				// Navigate to the URL
 				driver.get(strLine);
+				System.out.println("Navigate to the target URL: " + strLine);
 				
 				// Declare variables to store the scraped values
 				String building, address, noOfRecords, rentedDate, unitNo, rentPrice, beds, baths, foot;
 				
 				// Declare variables to store the Xpath, CSS Selectors
+				String buildingXpath = "//div[@class='right-two-fifths main-info']/h1";
+				String addressXpath = "//h2[@class='subtitle']";
 				String pastRentalTabXpath = "//*[@id='building-tabs']/div[3]";
 				String rentalRecordXpath = "//*[@class='listing_block loaded']/tr/td[@class='activity_date']";
 				String allActivityLinkXpath = "//*[@id='see-all-activity-link' and not(@style)]/a";
 				String loadingIconXpath = "div[@class='loading']";
+				String prefixRecordXpath = "//*[@class='listing_block loaded']/tr";				
+				String suffixRentedDateXpath = "/td[@class='activity_date']";
+				String suffixUnitNoXpath = "/td[@class='activity_unit hidden-xs']/a"; 
+				String suffixRentPriceXpath = "/td[3]/span[1]";
 				
 				// PAST RENTAL tab
-				if (isElementPresent(driver, By.xpath(pastRentalTabXpath))){
+				if (isElementPresent(driver, By.xpath(pastRentalTabXpath))) {
+					//System.out.println("Click PAST RENTALS tab");
 					driver.findElement(By.xpath(pastRentalTabXpath)).click();
 					
+					// waiting for a while to load the RENTAL RECORDS,
+					System.out.print("Page is loading ");
+					objCommon.loadingIcon(driver, loadingIconXpath);
 					
-					// waiting for awhile to load the RENTAL RECORDS,
-					WebDriverWait wait = new WebDriverWait(driver, 15);
-					try {
-						WebElement recordsFound = wait.until(ExpectedConditions
-								.presenceOfElementLocated(By
-										.xpath(rentalRecordXpath)));
-					} catch (TimeoutException timeOutExp) {
-						// There is no record found after a certain of seconds
-						System.out.println("No RENTAL RECORDS found");
-					}
 					
 					// There are ALL ACTIVITY LINK
-					if(isElementPresent(driver, By.xpath(allActivityLinkXpath))){
-						driver.findElement(By.xpath(allActivityLinkXpath)).click();
-						// waiting for awhile to load all RENTAL RECORDS
-						objCommon.loadingIcon(driver, loadingIconXpath);			
+					if (isElementPresent(driver, By.xpath(allActivityLinkXpath))) {
+						//System.out.println("Click SHOW ALL ACTIVITY link");
+						driver.findElement(By.xpath(allActivityLinkXpath))
+								.click();
 						
-						// Start scraping the records
-						System.out.println();
+						// waiting for awhile to load all RENTAL RECORDS
+						//objCommon.loadingIcon(driver, loadingIconXpath);
+						boolean noLink = true;
+												
+						while (noLink) {
+							System.out.print("Page is loading ");
+							objCommon.pause(3000);
+							if(isElementPresent(driver, By.xpath(allActivityLinkXpath))){
+								System.out.print(".....");
+							} else{
+								noLink = false;
+								System.out.println();
+							}
+						}						
 						
 					} else {
-						System.out.println("There is no ALL ACTIVITY LINK.");
+						//System.out.println("There is no SHOW ALL ACTIVITY link.");
+					}
+					
+					building = objMain.getText(driver, By.xpath(buildingXpath));
+					address = objMain.getText(driver, By.xpath(addressXpath));
+					
+					// There are some RENTAL RECORDS found
+					if(isElementPresent(driver, By.xpath(rentalRecordXpath))){
+						// Start scraping the RENTALS records						
+						
+						// Getting numbers of records
+						List<WebElement> allPastRentalRecords = driver.findElements(By
+								.xpath(prefixRecordXpath));
+
+						System.out.println("There are " + allPastRentalRecords.size()
+								+ " records to be scraped.");
+
+						noOfRecords = Integer
+								.toString(allPastRentalRecords.size());
+						String [][] valueToWrite = new String [allPastRentalRecords.size()][10];
+						
+						for (int row = 1; row <= allPastRentalRecords.size(); row++) {
+							
+							rentedDate = objMain.getText(driver, By.xpath(prefixRecordXpath + "[" + row + "]"
+									+ suffixRentedDateXpath));
+							
+							unitNo = objMain.getText(driver, By.xpath(prefixRecordXpath + "["
+									+ row + "]"
+									+ suffixUnitNoXpath));
+							
+							rentPrice = objMain.getText(driver, By.xpath(prefixRecordXpath + "[" + row + "]"
+											+ suffixRentPriceXpath));
+							
+							beds = objMain.getText(driver, By.xpath(prefixRecordXpath + "[" + row + "]"
+									+ "/td[4]"));
+
+							baths = objMain.getText(driver, By.xpath(prefixRecordXpath + "[" + row + "]"
+									+ "/td[5]"));
+							
+							foot = objMain.getText(driver, By.xpath(prefixRecordXpath + "[" + row + "]"
+											+ "/td[6]"));							
+							
+							valueToWrite[row-1][0] = strLine;
+							valueToWrite[row-1][1] = building;
+							valueToWrite[row-1][2] = address;
+							valueToWrite[row-1][3] = noOfRecords;
+							valueToWrite[row-1][4] = rentedDate;
+							valueToWrite[row-1][5] = unitNo;
+							valueToWrite[row-1][6] = rentPrice;
+							valueToWrite[row-1][7] = beds;
+							valueToWrite[row-1][8] = baths;
+							valueToWrite[row-1][9] = foot;	
+							System.out.println("\tScraping the record: " + row);
+							
+						}
+						objCommon.writeExcel(folderName, targetFile, "Sheet1",
+								valueToWrite, allPastRentalRecords.size() );						
+						
+					} else {
+						System.out.println("There are NO RENTAL RECORDS found");
+						// Write "NO VALUE"
+						String[] noValueToWrite = { strLine, building, address, "No Records", "", "", "", "", "", ""};						
+						objCommon.writeExcel(folderName, targetFile, "Sheet1",
+								noValueToWrite);	
+					
 					}
 					
 				} else {
-					System.out.println("No PAST RENTAL tab");
+					//System.out.println("No PAST RENTAL tab");
+					
 				}
-				
-				
-				
+				System.out.println("-------------------------------------------------");
+				strLine = br.readLine();
 			}
+			System.out.println("End of File, Exit Buffered Reading.");
 			// Close the input stream
 			inputStream.close();
+			System.out.println("End Scraping Job.");
 		} catch (Exception e) {// Catch exception if any
 			System.err.println("Error: " + e.getMessage());
 		}
 	}
+	
+	public String getText(WebDriver driver, By by){
+		if(isElementPresent(driver, by)){
+			return driver.findElement(by).getText().trim();
+		} else {
+			return "";
+		}
+		
+	}
+	
+	/*
+	 * New code on June 30, 2015
+	 * BaseUrl: http://webapps.nyc.gov:8084/CICS/fin1/find001i
+	 * Purpose: scraping the Owner and Parcel values by using Parcel
+	 * Note: The excel was removed the duplicates
+	 */
+	public void scrapeParcelOwnerPropertyMailingPDF(String browser, String orginalFile, int indexSheet, int totalRows){
+		String basedURL = "http://webapps.nyc.gov:8084/CICS/fin1/find001i";
+		switch (browser) {
+		case "Firefox":
+			try {
+				driver = new FirefoxDriver(firefoxProfile());
+			} catch (Exception e2) {
+				// TODO Auto-generated catch block
+				// e2.printStackTrace();
+				System.out.println("Unable to using Firefox Profile.");
+				driver = new FirefoxDriver();
+			}
+			break;
+		case "Chrome":
+			System.setProperty("webdriver.chrome.driver",
+					"D:/oDesk/chromedriver.exe");
+			driver = new ChromeDriver();
+			break;
+		case "Headless":
+			// prepare capabilities
+			DesiredCapabilities DesireCaps = new DesiredCapabilities();
+			DesireCaps.setCapability("takesScreenshot", true);
+			DesireCaps.setCapability(
+					PhantomJSDriverService.PHANTOMJS_EXECUTABLE_PATH_PROPERTY,
+					"D:\\DevTools\\phantomjs-2.0.0-windows\\bin\\phantomjs.exe");
+			driver = new PhantomJSDriver(DesireCaps);
+			break;
+		}
+		Common objCommon = new Common();
+		ScrapeStreetEasy objMain = new ScrapeStreetEasy();
+		driver.get(basedURL);
+		driver.manage().window().maximize();
+		
+		String downloadFolder = "D:\\WebDriverDownloadFolder";
+		String downloadedFile = "StatementSearch";
+		String folderName = "D:\\oDesk\\Scraper\\Gerald\\";
+		String sourceFile = orginalFile + ".xls";
+		String targetFile = orginalFile + "_targetFile.xls";
+
+		Workbook wk = null;
+		try {
+			wk = Workbook.getWorkbook(new File(folderName + sourceFile));
+		} catch (BiffException e1) {
+			// TODO Auto-generated catch block
+			// e1.printStackTrace();
+			System.out.println("Error: Unable to recognize OLE stream");
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		WritableWorkbook workbook = null;
+		try {
+			workbook = Workbook.createWorkbook(
+					new File(folderName + targetFile), wk);
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+
+		WritableSheet sheet = workbook.getSheet(indexSheet);
+
+		Label label;
+	
+		// --> Read Stream
+		try {
+			
+			String houseNumberCSS = "input[name='FHOUSENUM']";
+			String streetNameCSS = "input[name='FSTNAME']";
+			String aptNameCSS = "input[name='FAPTNUM']";
+			String searchButtonCSS = "input[name='DFH_ENTER']";
+
+			String parcelXpath = "//font[contains(text(),'Parcel (BBL)')]/following::font[1]";
+			String ownerXapth = "//font[contains(text(),'Owner(s)')]/following::font[1]";
+			String propertyAddressXpath = "//font[contains(text(),'Property Address')]/following::font[1]";
+			String propertyTaxXpath = "//a[contains(text(), 'Quarterly Property Tax Bill')]";
+			
+			int recordNoFound = 0;
+			for (int row = 1; row <= totalRows; row++) {
+				String parcelValue = "Not Found";
+				String ownerValue = "Not Found";
+				String propertyAddressValue = "";
+				String matchValue = "";
+				String textPdf = "";
+				String addressValue = "";
+				
+				System.out.print("Record " + row + ": ");				
+
+				String streetNo = objCommon.readValueFromExcel(folderName, sourceFile, "Sheet1", row, 1).trim();
+				String street = objCommon.readValueFromExcel(folderName, sourceFile, "Sheet1", row, 2).trim().toUpperCase();
+				String apartment = objCommon.readValueFromExcel(folderName, sourceFile, "Sheet1", row, 3).trim();
+				System.out.print(streetNo + " " + street + " " + apartment + " : ");
+				
+				WebDriverWait wait = new WebDriverWait(driver, 10);
+				WebElement houseNumberTXT = wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector(houseNumberCSS)));
+				WebElement streetNameTXT = wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector(streetNameCSS)));
+				WebElement aptNameTXT = wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector(aptNameCSS)));
+				WebElement searchBTN = wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector(searchButtonCSS)));
+
+				houseNumberTXT.clear();
+				houseNumberTXT.sendKeys(streetNo);
+				streetNameTXT.clear();
+				streetNameTXT.sendKeys(street);
+				aptNameTXT.clear();
+				aptNameTXT.sendKeys(apartment);
+				searchBTN.click();
+				
+				if (driver.getTitle().contains("ERROR: Connection Error")) {
+					boolean waitForOnlineServices = true;
+					while (waitForOnlineServices) {
+						objCommon.pause(5000);
+						driver.navigate().refresh();
+						objCommon.pause(2000);
+						if (!driver.getTitle().contains(
+								"ERROR: Connection Error")) {
+							waitForOnlineServices = false;
+						}
+					}
+				} else if (driver.getTitle().contains("BBLE FOUND-jump page") || 
+							driver.getTitle().contains("NYCProperty Statements List")) {
+					int countDownloadedFiles = objCommon.getFileDownloaded(downloadFolder);
+					boolean waitForElement = true;
+					System.out.println("FOUND");
+
+					while (waitForElement) {
+						objCommon.pause(2000);
+						if (isElementPresent(driver, By.xpath(parcelXpath))) {
+							waitForElement = false;
+							parcelValue = driver.findElement(
+									By.xpath(parcelXpath)).getText();
+
+							ownerValue = objMain.getText(driver, By.xpath(ownerXapth));
+							propertyAddressValue = objMain.getText(driver, By.xpath(propertyAddressXpath));
+							
+							// Compare the inputed address and return address
+							String inputtedAddress = streetNo + " " + street;
+							if (propertyAddressValue
+									.startsWith(inputtedAddress)) {
+								matchValue = "Match";
+							} else {
+								matchValue = "Difference";
+							}
+							
+							driver.findElement(By.xpath(propertyTaxXpath)).click();
+							objCommon.pause(1000);
+							wait.until(ExpectedConditions.elementToBeClickable(By.xpath(propertyTaxXpath)));
+							driver.findElement(By.xpath(propertyTaxXpath)).click();
+							objCommon.pause(6000);
+							
+							int downloadedFiles = row - recordNoFound;
+							if(objCommon.isFileDownloaded(downloadFolder, downloadedFile + "(" + downloadedFiles + ")")){
+								textPdf = objCommon.extractTextFromPDF(downloadFolder, downloadedFile + "(" + downloadedFiles + ")");
+								addressValue = objCommon.extractAddress(textPdf);	
+							} else{							
+								/*
+								System.out.println("Download again......");
+								driver.findElement(By.xpath(propertyTaxXpath)).click();
+								objCommon.pause(6000);
+								textPdf = objCommon.extractTextFromPDF(downloadFolder, downloadedFile + "(" + downloadedFiles + ")");
+								addressValue = objCommon.extractAddress(textPdf);	*/
+							}
+							if(countDownloadedFiles == objCommon.getFileDownloaded(downloadFolder)){
+								recordNoFound++;
+							}
+						}
+						
+					}// End of WHILE LOOP
+					driver.get(basedURL);
+				} else {
+					System.out.println("RECORD NOT FOUND---");
+					parcelValue = ownerValue = propertyAddressValue = matchValue = textPdf = addressValue = "Not Found";
+					recordNoFound++;
+					
+				}
+				// End of If clause
+				try {
+					// Write the values to writeToExcel file
+					label = new Label(5, row, parcelValue);
+					sheet.addCell(label);
+					label = new Label(6, row, ownerValue);
+					sheet.addCell(label);
+					label = new Label(7, row, propertyAddressValue);
+					sheet.addCell(label);
+					label = new Label(8, row, matchValue);
+					sheet.addCell(label);
+					label = new Label(9, row, textPdf);
+					sheet.addCell(label);
+					label = new Label(10, row, addressValue);
+					sheet.addCell(label);
+
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+					workbook.write();
+					workbook.close();
+				}
+			} // End of looping each rows
+		} catch (Exception e) {
+			e.printStackTrace();
+			try {
+				workbook.write();
+			} catch (IOException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+			try {
+				workbook.close();
+			} catch (WriteException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			} catch (IOException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+		}
+		try {
+			workbook.write();
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		try {
+			workbook.close();
+		} catch (WriteException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+	}
+
+	
+	/*
+	 * BaseUrl: http://nycserv.nyc.gov/NYCServWeb/NYCSERVMain
+	 * Purpose: scraping the Owner and Parcel values by using Parcel
+	 * Note: Remove the duplicates
+	 */
+	public void scrapeOwnerAddressFromNYCSERVMain(String browser, String orginalFile, int totalRows) {
+		String basedURL = "http://nycserv.nyc.gov/NYCServWeb/NYCSERVMain";
+		switch (browser) {
+		case "Firefox":
+			try {
+				driver = new FirefoxDriver(firefoxProfile());
+			} catch (Exception e2) {
+				// TODO Auto-generated catch block
+				// e2.printStackTrace();
+				System.out.println("Unable to using Firefox Profile.");
+				driver = new FirefoxDriver();
+			}
+			break;
+		case "Chrome":
+			System.setProperty("webdriver.chrome.driver",
+					"D:/oDesk/chromedriver.exe");
+			driver = new ChromeDriver();
+			break;
+		case "Headless":
+			// prepare capabilities
+			DesiredCapabilities DesireCaps = new DesiredCapabilities();
+			DesireCaps.setCapability("takesScreenshot", true);
+			DesireCaps.setCapability(
+					PhantomJSDriverService.PHANTOMJS_EXECUTABLE_PATH_PROPERTY,
+					"D:\\DevTools\\phantomjs-2.0.0-windows\\bin\\phantomjs.exe");
+			driver = new PhantomJSDriver(DesireCaps);
+			break;
+		}
+
+		driver.get(basedURL);
+		driver.manage().window().maximize();
+
+		String folderName = "D:\\oDesk\\Scraper\\Gerald\\";
+		String sourceFile = orginalFile + ".xls";
+		String targetFile = orginalFile + "_targetFile.xls";
+
+		WritableWorkbook workbook = null;
+		try {
+
+			Workbook wk = Workbook
+					.getWorkbook(new File(folderName + sourceFile));
+			workbook = Workbook.createWorkbook(
+					new File(folderName + targetFile), wk);
+		} catch (BiffException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+
+		WritableSheet sheet = workbook.getSheet(0);
+
+		Label label;
+		Common objCommon = new Common();
+		ScrapeStreetEasy objMain = new ScrapeStreetEasy();
+		// --> Read Stream
+		try {
+			// The number of rows: 14629
+			// int totalRows = 3000;
+
+			String goBtnXpath = "//tr[3]/td[2]/input";
+
+			String blockTxTCss = "input[name='BLOCK']";
+			String lotTxTCss = "input[name='LOT']";
+			String searchBtnCss = "img[name='BBLSearch']";
+
+			String nameXpath = "//b[contains(text(), 'Name(s)')]/following::td[@class='detailStatus'][1]";
+			String addressXapth = "//b[contains(text(), 'Mailing Address')]/following::td[@class='detailStatus'][1]";
+			String cancelBtnXpath = "//a/img[@alt='Cancel']";
+
+			String nameValue = "";
+			String addressValue = "";
+
+			// Click go button
+			WebElement goBtn = driver.findElement(By.xpath(goBtnXpath));
+			goBtn.click();
+			
+
+			for (int row = 1; row <= totalRows; row++) {
+				System.out.println("Record " + row);
+				WebDriverWait wait = new WebDriverWait(driver, 10);
+				// Getting inputted value from Excel file
+				String BBL = objCommon.readValueFromExcel(folderName,
+						sourceFile, "Sheet1", row, 0);
+				System.out.print("Parcel: " + BBL + "\t");
+				String blockNo = BBL.substring(2, 6);
+				String lotNo = BBL.substring(7);
+
+				WebElement blockNoTXT = wait.until(ExpectedConditions
+						.presenceOfElementLocated(By.cssSelector(blockTxTCss)));
+				WebElement lotNoTXT = wait.until(ExpectedConditions
+						.presenceOfElementLocated(By.cssSelector(lotTxTCss)));
+				WebElement searchBTN = wait
+						.until(ExpectedConditions.presenceOfElementLocated(By
+								.cssSelector(searchBtnCss)));
+
+				blockNoTXT.clear();
+				blockNoTXT.sendKeys(blockNo);
+				lotNoTXT.clear();
+				lotNoTXT.sendKeys(lotNo);
+
+				
+					searchBTN.click();
+					try {
+						JavascriptExecutor js = (JavascriptExecutor) driver;
+						js.executeScript("arguments[0].click();", searchBTN);
+					} catch (Exception e1) {
+						// TODO Auto-generated catch block
+						//e1.printStackTrace();
+					}
+					
+			
+					try {
+						Alert alrt = driver.switchTo().alert();
+						
+						// First Case: Write values to excel 
+						if (alrt.getText().startsWith("The amount due reflects the interest according to the Statement of Account")) {
+							System.out.println(alrt.getText());
+							alrt.accept();							
+							objCommon.pause(2000);
+							driver.switchTo().defaultContent();
+							if (isElementPresent(driver, By.xpath(addressXapth))) {
+								addressValue = driver.findElement(
+										By.xpath(addressXapth)).getText();
+								if (isElementPresent(driver, By.xpath(nameXpath))) {
+									nameValue = driver.findElement(
+											By.xpath(nameXpath)).getText();
+								} else {
+									nameValue = "";
+								}
+								// Click Cancel to back the search page
+								try {
+									wait.until(ExpectedConditions
+											.elementToBeClickable(By
+													.xpath(cancelBtnXpath)));
+									driver.findElement(By.xpath(cancelBtnXpath))
+											.click();
+								} catch (NoSuchElementException e1) {
+									// TODO Auto-generated catch block
+									// e.printStackTrace();
+									System.out.println("No Cancel button");
+								}
+							} else {
+								addressValue = "Not Available";
+							}// First Case: END	
+							
+							
+						} else { // Second Case: No Outstanding
+							System.out.println(alrt.getText());
+							alrt.accept();
+							nameValue = "No outstanding";
+							addressValue = "";
+						}
+					} catch (NoAlertPresentException e) {
+						//Error page
+						System.out.println("ERROR - NO ALERT");
+						driver.getTitle().equals("Error Page");
+						objCommon.pause(10000);
+						driver.navigate().back();	
+						nameValue = "Error, Try again";
+						addressValue = "";
+					}
+				
+					// Writing the value
+				try {
+					// Write the values to writeToExcel file
+					label = new Label(2, row, nameValue);
+					sheet.addCell(label);
+					label = new Label(3, row, addressValue);
+					sheet.addCell(label);
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+					workbook.write();
+					workbook.close();
+				}
+				System.out.println("-----------------------------------");
+
+			} // End of looping each rows
+		} catch (Exception e) {
+			e.printStackTrace();
+			try {
+				workbook.write();
+			} catch (IOException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+			try {
+				workbook.close();
+			} catch (WriteException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			} catch (IOException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+		}
+		try {
+			workbook.write();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		try {
+			workbook.close();
+		} catch (WriteException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+		
+	public void scrapeOwnerAddressFromNYCSERVMainNoAlert(String browser, String orginalFile, int totalRows) {
+		String basedURL = "http://nycserv.nyc.gov/NYCServWeb/NYCSERVMain";
+		switch (browser) {
+		case "Firefox":
+			try {
+				driver = new FirefoxDriver(firefoxProfile());
+			} catch (Exception e2) {
+				// TODO Auto-generated catch block
+				// e2.printStackTrace();
+				System.out.println("Unable to using Firefox Profile.");
+				driver = new FirefoxDriver();
+			}
+			break;
+		case "Chrome":
+			System.setProperty("webdriver.chrome.driver",
+					"D:/oDesk/chromedriver.exe");
+			driver = new ChromeDriver();
+			break;
+		case "Headless":
+			// prepare capabilities
+			DesiredCapabilities DesireCaps = new DesiredCapabilities();
+			DesireCaps.setCapability("takesScreenshot", true);
+			DesireCaps.setCapability(
+					PhantomJSDriverService.PHANTOMJS_EXECUTABLE_PATH_PROPERTY,
+					"D:\\DevTools\\phantomjs-2.0.0-windows\\bin\\phantomjs.exe");
+			driver = new PhantomJSDriver(DesireCaps);
+			break;
+		}
+
+		driver.get(basedURL);
+		driver.manage().window().maximize();
+
+		String folderName = "D:\\oDesk\\Scraper\\Gerald\\";
+		String sourceFile = orginalFile + ".xls";
+		String targetFile = orginalFile + "_targetFile.xls";
+
+		WritableWorkbook workbook = null;
+		try {
+
+			Workbook wk = Workbook
+					.getWorkbook(new File(folderName + sourceFile));
+			workbook = Workbook.createWorkbook(
+					new File(folderName + targetFile), wk);
+		} catch (BiffException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+
+		WritableSheet sheet = workbook.getSheet(0);
+
+		Label label;
+		Common objCommon = new Common();
+		ScrapeStreetEasy objMain = new ScrapeStreetEasy();
+		// --> Read Stream
+		try {
+			// The number of rows: 14629
+			// int totalRows = 3000;
+
+			String goBtnXpath = "//tr[3]/td[2]/input";
+
+			String blockTxTCss = "input[name='BLOCK']";
+			String lotTxTCss = "input[name='LOT']";
+			String searchBtnCss = "img[name='BBLSearch']";
+
+			String nameXpath = "//b[contains(text(), 'Name(s)')]/following::td[@class='detailStatus'][1]";
+			String addressXapth = "//b[contains(text(), 'Mailing Address')]/following::td[@class='detailStatus'][1]";
+			String cancelBtnXpath = "//a/img[@alt='Cancel']";
+
+			String nameValue = "";
+			String addressValue = "";
+
+			// Click go button
+			WebElement goBtn = driver.findElement(By.xpath(goBtnXpath));
+			goBtn.click();
+			
+
+			for (int row = 1; row <= totalRows; row++) {
+				System.out.println("Record " + row);
+				WebDriverWait wait = new WebDriverWait(driver, 10);
+				// Getting inputted value from Excel file
+				String BBL = objCommon.readValueFromExcel(folderName,
+						sourceFile, "Sheet1", row, 0);
+				System.out.print("Parcel: " + BBL + "\t");
+				String blockNo = BBL.substring(2, 6);
+				String lotNo = BBL.substring(7);
+
+				WebElement blockNoTXT = wait.until(ExpectedConditions
+						.presenceOfElementLocated(By.cssSelector(blockTxTCss)));
+				WebElement lotNoTXT = wait.until(ExpectedConditions
+						.presenceOfElementLocated(By.cssSelector(lotTxTCss)));
+				WebElement searchBTN = wait
+						.until(ExpectedConditions.presenceOfElementLocated(By
+								.cssSelector(searchBtnCss)));
+
+				blockNoTXT.clear();
+				blockNoTXT.sendKeys(blockNo);
+				lotNoTXT.clear();
+				lotNoTXT.sendKeys(lotNo);
+
+				
+					searchBTN.click();
+					try {
+						JavascriptExecutor js = (JavascriptExecutor) driver;
+						js.executeScript("arguments[0].click();", searchBTN);
+					} catch (Exception e1) {
+						// TODO Auto-generated catch block
+						//e1.printStackTrace();
+					}
+					
+			
+					try {
+						Alert alrt = driver.switchTo().alert();
+						
+						// First Case: Write values to excel 
+						if (alrt.getText().startsWith("The amount due reflects the interest according to the Statement of Account")) {
+							System.out.println(alrt.getText());
+							alrt.accept();							
+							objCommon.pause(2000);
+							driver.switchTo().defaultContent();
+							if (isElementPresent(driver, By.xpath(addressXapth))) {
+								addressValue = driver.findElement(
+										By.xpath(addressXapth)).getText();
+								if (isElementPresent(driver, By.xpath(nameXpath))) {
+									nameValue = driver.findElement(
+											By.xpath(nameXpath)).getText();
+								} else {
+									nameValue = "";
+								}
+								// Click Cancel to back the search page
+								try {
+									wait.until(ExpectedConditions
+											.elementToBeClickable(By
+													.xpath(cancelBtnXpath)));
+									driver.findElement(By.xpath(cancelBtnXpath))
+											.click();
+								} catch (NoSuchElementException e1) {
+									// TODO Auto-generated catch block
+									// e.printStackTrace();
+									System.out.println("No Cancel button");
+								}
+							} else {
+								addressValue = "Not Available";
+							}// First Case: END	
+							
+							
+						} else if (driver.getTitle().startsWith("Property Tax Select Items")) {
+													
+						
+					
+							if (isElementPresent(driver, By.xpath(addressXapth))) {
+								addressValue = driver.findElement(
+										By.xpath(addressXapth)).getText();
+								if (isElementPresent(driver, By.xpath(nameXpath))) {
+									nameValue = driver.findElement(
+											By.xpath(nameXpath)).getText();
+								} else {
+									nameValue = "";
+								}
+								// Click Cancel to back the search page
+								try {
+									wait.until(ExpectedConditions
+											.elementToBeClickable(By
+													.xpath(cancelBtnXpath)));
+									driver.findElement(By.xpath(cancelBtnXpath))
+											.click();
+								} catch (NoSuchElementException e1) {
+									// TODO Auto-generated catch block
+									// e.printStackTrace();
+									System.out.println("No Cancel button");
+								}
+							} else {
+								addressValue = "Not Available";
+							}// First Case: END								
+							
+						} else { // Second Case: No Outstanding
+							System.out.println(alrt.getText());
+							alrt.accept();
+							nameValue = "No outstanding";
+							addressValue = "";
+						}
+					} catch (NoAlertPresentException e) {
+						//Error page
+						System.out.println("ERROR - NO ALERT");
+						driver.getTitle().equals("Error Page");
+						objCommon.pause(10000);
+						driver.navigate().back();	
+						nameValue = "Error, Try again";
+						addressValue = "";
+					}
+				
+					// Writing the value
+				try {
+					// Write the values to writeToExcel file
+					label = new Label(2, row, nameValue);
+					sheet.addCell(label);
+					label = new Label(3, row, addressValue);
+					sheet.addCell(label);
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+					workbook.write();
+					workbook.close();
+				}
+				System.out.println("-----------------------------------");
+
+			} // End of looping each rows
+		} catch (Exception e) {
+			e.printStackTrace();
+			try {
+				workbook.write();
+			} catch (IOException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+			try {
+				workbook.close();
+			} catch (WriteException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			} catch (IOException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+		}
+		try {
+			workbook.write();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		try {
+			workbook.close();
+		} catch (WriteException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	
 }
